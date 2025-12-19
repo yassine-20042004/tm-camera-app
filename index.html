@@ -35,25 +35,30 @@ canvas {
 <p id="status"></p>
 
 <script>
-const URL = "./mymodel/"; // your normal TM model folder
-const GRID = 3;             // best compromise: 3x3 grid
-const FRAME_SKIP = 2;       // predict every 2 frames
+/* === CONFIGURATION === */
+const URL = "https://yassine-20042004.github.io/tm-camera-app/mymodel/"; // <== Replace with your GitHub Pages URL
+const GRID = 3;             // 3x3 grid
+const FRAME_SKIP = 2;       // Predict every 2 frames
+const THRESHOLD = 0.75;     // Detection threshold
 let model, webcam, frameCount = 0;
 
 document.getElementById("startButton").onclick = init;
 
 async function init() {
-    document.getElementById("status").innerText = "Loading model...";
+    const status = document.getElementById("status");
+    status.innerText = "Loading model...";
     try {
         model = await tmImage.load(URL + "model.json", URL + "metadata.json");
-        document.getElementById("status").innerText = "Model loaded!";
+        status.innerText = "Model loaded!";
+        console.log("Model loaded successfully");
     } catch (e) {
-        document.getElementById("status").innerText = "Failed to load model";
-        console.error(e);
+        status.innerText = "Failed to load model. Check console.";
+        console.error("Model failed to load:", e);
         return;
     }
 
-    webcam = new tmImage.Webcam(320, 320, true); // true = front camera
+    // Initialize webcam
+    webcam = new tmImage.Webcam(320, 320, true); // true = front camera fallback
     await webcam.setup({ facingMode: "environment" }); // try back camera
     await webcam.play();
 
@@ -86,7 +91,6 @@ async function detectGrid() {
 
     for (let y = 0; y < GRID; y++) {
         for (let x = 0; x < GRID; x++) {
-            // Crop each cell
             const imageData = ctx.getImageData(x * cellW, y * cellH, cellW, cellH);
 
             const temp = document.createElement("canvas");
@@ -94,12 +98,14 @@ async function detectGrid() {
             temp.height = cellH;
             temp.getContext("2d").putImageData(imageData, 0, 0);
 
-            // Predict
-            const prediction = await model.predict(temp);
-
-            const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
-            if (dirty && dirty.probability > 0.75) { // slightly lower threshold for better detection
-                drawBox(x * cellW, y * cellH, cellW, cellH);
+            try {
+                const prediction = await model.predict(temp);
+                const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
+                if (dirty && dirty.probability > THRESHOLD) {
+                    drawBox(x * cellW, y * cellH, cellW, cellH);
+                }
+            } catch (e) {
+                console.error("Prediction failed for a grid cell:", e);
             }
         }
     }
