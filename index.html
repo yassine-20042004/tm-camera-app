@@ -4,70 +4,53 @@
 <meta charset="UTF-8">
 <title>Dirty Road Detector</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="apple-mobile-web-app-capable" content="yes">
-
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
 <style>
-body {
-    background:#111;
-    color:#fff;
-    text-align:center;
-    font-family:Arial;
-}
-#container {
-    position: relative;
-    display: inline-block;
-}
-canvas {
-    border-radius: 12px;
-}
-.box {
-    position:absolute;
-    border:3px solid rgba(255,0,0,0.7);
-    box-sizing:border-box;
-    pointer-events: none;
-}
+body { background:#111; color:#fff; text-align:center; font-family:Arial; }
+#container { position:relative; display:inline-block; }
+canvas { border-radius:12px; }
+.box { position:absolute; border:3px solid rgba(255,0,0,0.7); box-sizing:border-box; pointer-events:none; }
 </style>
 </head>
-
 <body>
 <h2>🚧 Dirty Road Detection</h2>
-<button onclick="init()">Start Camera</button>
-
+<button id="startButton">Start Camera</button>
 <div id="container"></div>
+<p id="status"></p>
 
 <script>
-const URL = "./mymodel/"; // update if hosted elsewhere
-const GRID = 5;           // higher resolution grid
-const THRESHOLD = 0.65;   // lower probability threshold
+const URL = "./mymodel/";
+const GRID = 3;       // lower grid = faster
+const THRESHOLD = 0.65;
+const FRAME_SKIP = 2; // only predict every 2 frames
 
-let model, webcam;
+let model, webcam, frameCount = 0;
+
+document.getElementById("startButton").onclick = init;
 
 async function init() {
+    const status = document.getElementById("status");
+    status.innerText = "Loading model...";
     try {
         model = await tmImage.load(URL + "model.json", URL + "metadata.json");
-        // request back camera
-        webcam = new tmImage.Webcam(320, 320, false); 
-        await webcam.setup({ facingMode: "environment" }); 
+        status.innerText = "Model loaded!";
+        webcam = new tmImage.Webcam(320, 320, true);
+        await webcam.setup({ facingMode: "environment" });
         await webcam.play();
-
-        const container = document.getElementById("container");
-        container.innerHTML = "";
-        container.appendChild(webcam.canvas);
-
+        document.getElementById("container").appendChild(webcam.canvas);
+        status.innerText = "Camera started. Detecting dirt...";
         window.requestAnimationFrame(loop);
-    } catch(err) {
-        console.error("Error starting webcam:", err);
-        alert("Could not access webcam or load model. Check console.");
+    } catch(e) {
+        console.error(e);
+        status.innerText = "Failed to load model or access webcam";
     }
 }
 
-
 async function loop() {
     webcam.update();
-    await detectGrid();
+    frameCount++;
+    if(frameCount % FRAME_SKIP === 0) await detectGrid();
     window.requestAnimationFrame(loop);
 }
 
@@ -80,21 +63,10 @@ async function detectGrid() {
 
     const cellW = w / GRID;
     const cellH = h / GRID;
-    const strideX = cellW / 2; // 50% overlap
-    const strideY = cellH / 2;
 
-    let dirtyCells = [];
-
-    for (let y = 0; y <= h - cellH; y += strideY) {
-        for (let x = 0; x <= w - cellW; x += strideX) {
-            const imageData = ctx.getImageData(x, y, cellW, cellH);
-
-            // Grayscale preprocessing
-            for (let i = 0; i < imageData.data.length; i += 4) {
-                const avg = (imageData.data[i] + imageData.data[i+1] + imageData.data[i+2]) / 3;
-                imageData.data[i] = imageData.data[i+1] = imageData.data[i+2] = avg;
-            }
-
+    for(let y = 0; y < GRID; y++){
+        for(let x = 0; x < GRID; x++){
+            const imageData = ctx.getImageData(x*cellW, y*cellH, cellW, cellH);
             const temp = document.createElement("canvas");
             temp.width = cellW;
             temp.height = cellH;
@@ -102,38 +74,22 @@ async function detectGrid() {
 
             const prediction = await model.predict(temp);
             const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
-
-            if (dirty && dirty.probability > THRESHOLD) {
-                dirtyCells.push({x, y, w: cellW, h: cellH});
+            if(dirty && dirty.probability > THRESHOLD){
+                drawBox(x*cellW, y*cellH, cellW, cellH);
             }
         }
     }
-
-    mergeBoxes(dirtyCells);
 }
 
-// Merge all nearby dirty cells into one bounding box
-function mergeBoxes(dirtyCells) {
-    if (dirtyCells.length === 0) return;
-
-    let minX = Math.min(...dirtyCells.map(c => c.x));
-    let minY = Math.min(...dirtyCells.map(c => c.y));
-    let maxX = Math.max(...dirtyCells.map(c => c.x + c.w));
-    let maxY = Math.max(...dirtyCells.map(c => c.y + c.h));
-
-    drawBox(minX, minY, maxX - minX, maxY - minY);
-}
-
-function drawBox(x, y, w, h) {
+function drawBox(x, y, w, h){
     const box = document.createElement("div");
     box.className = "box";
-    box.style.left = x + "px";
-    box.style.top = y + "px";
-    box.style.width = w + "px";
-    box.style.height = h + "px";
+    box.style.left = x+"px";
+    box.style.top = y+"px";
+    box.style.width = w+"px";
+    box.style.height = h+"px";
     document.getElementById("container").appendChild(box);
 }
 </script>
 </body>
 </html>
-
