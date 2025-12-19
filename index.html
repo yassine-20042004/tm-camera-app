@@ -1,36 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dirty Road Detection</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+    background:#111;
+    color:white;
+    font-family:Arial;
+    text-align:center;
+    padding-top:20px;
+}
+#webcam-container canvas {
+    border-radius:12px;
+    margin-top:10px;
+}
+button {
+    padding:14px 28px;
+    font-size:18px;
+    cursor:pointer;
+}
+</style>
+
+<!-- IMPORTANT: load libs BEFORE script -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4/dist/teachablemachine-image.min.js"></script>
+</head>
 
-<script type="text/javascript">
-const URL = "./mymodel/";
+<body>
+
+<h2>🚧 Dirty Road Detection</h2>
+<button id="startBtn">Start Camera</button>
+
+<div id="webcam-container"></div>
+<div id="label-container"></div>
+
+<script>
+const MODEL_URL = "./mymodel/";
 
 let model, webcam, labelContainer, maxPredictions;
 
+// Button click REQUIRED
+document.getElementById("startBtn").addEventListener("click", init);
+
 async function init() {
-    const modelURL = URL + "model.json";
-    const metadataURL = URL + "metadata.json";
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("startBtn").innerText = "Loading...";
 
-    model = await tmImage.load(modelURL, metadataURL);
-    maxPredictions = model.getTotalClasses();
+    try {
+        model = await tmImage.load(
+            MODEL_URL + "model.json",
+            MODEL_URL + "metadata.json"
+        );
 
-    // IMPORTANT SETTINGS
-    const flip = false; // back camera MUST NOT be flipped
-    webcam = new tmImage.Webcam(320, 320, flip);
+        maxPredictions = model.getTotalClasses();
 
-    await webcam.setup({
-        facingMode: { exact: "environment" } // FORCE BACK CAMERA
-    });
+        webcam = new tmImage.Webcam(320, 320, false);
+        await webcam.setup({
+            facingMode: { exact: "environment" }
+        });
+        await webcam.play();
 
-    await webcam.play();
-    window.requestAnimationFrame(loop);
+        document.getElementById("webcam-container").appendChild(webcam.canvas);
 
-    document.getElementById("webcam-container").innerHTML = "";
-    document.getElementById("webcam-container").appendChild(webcam.canvas);
+        labelContainer = document.getElementById("label-container");
+        labelContainer.innerHTML = "";
+        for (let i = 0; i < maxPredictions; i++) {
+            labelContainer.appendChild(document.createElement("div"));
+        }
 
-    labelContainer = document.getElementById("label-container");
-    labelContainer.innerHTML = "";
-    for (let i = 0; i < maxPredictions; i++) {
-        labelContainer.appendChild(document.createElement("div"));
+        window.requestAnimationFrame(loop);
+        document.getElementById("startBtn").innerText = "Camera Started";
+    } catch (err) {
+        alert("ERROR: " + err.message);
+        console.error(err);
     }
 }
 
@@ -42,10 +87,13 @@ async function loop() {
 
 async function predict() {
     const predictions = await model.predict(webcam.canvas);
-
     for (let i = 0; i < maxPredictions; i++) {
         labelContainer.childNodes[i].innerHTML =
-            `${predictions[i].className}: ${(predictions[i].probability * 100).toFixed(1)}%`;
+            predictions[i].className + ": " +
+            (predictions[i].probability * 100).toFixed(1) + "%";
     }
 }
 </script>
+
+</body>
+</html>
