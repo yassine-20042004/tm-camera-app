@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dirty Road Detector</title>
+<title>Dirty Road Detector Debug</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
@@ -12,42 +12,65 @@ body { background: #111; color: #fff; text-align: center; font-family: Arial; }
 canvas { border-radius: 12px; }
 .box { position: absolute; border: 3px solid red; box-sizing: border-box; pointer-events: none; }
 button { padding: 10px 20px; font-size: 16px; margin: 10px; cursor: pointer; }
+#log { margin-top: 10px; color: yellow; text-align: left; max-width: 90%; margin-left: auto; margin-right: auto; }
 </style>
 </head>
 <body>
-<h2>🚧 Dirty Road Detection</h2>
+
+<h2>🚧 Dirty Road Detection (Debug Mode)</h2>
 <button onclick="init()">Start Camera</button>
 <div id="container"></div>
+<pre id="log"></pre>
 
 <script>
-const URL = "./mymodel/"; // Path to your TF.js model folder
-const GRID = 5;                  // 5x5 grid for detection
+const URL = "./mymodel/"; // Update with your folder path
+const GRID = 5;                  // 5x5 grid
 const THRESHOLD = 0.65;          // Confidence threshold
-const FRAME_SKIP = 2;            // Detect every 2 frames
+const FRAME_SKIP = 2;            // Skip frames for speed
 
 let model, webcam;
 let frameCount = 0;
 
+function log(message) {
+    console.log(message);
+    document.getElementById("log").textContent += message + "\n";
+}
+
 async function init() {
-    model = await tmImage.load(URL + "model.json", URL + "metadata.json");
-    webcam = new tmImage.Webcam(320, 320, false);
-    await webcam.setup({ facingMode: "environment" });
-    await webcam.play();
+    try {
+        log("Loading model...");
+        model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+        log("Model loaded successfully!");
 
-    const container = document.getElementById("container");
-    container.innerHTML = "";
-    container.appendChild(webcam.canvas);
+        webcam = new tmImage.Webcam(320, 320, false);
+        log("Setting up webcam...");
+        await webcam.setup({ facingMode: "environment" }); // Try rear camera
+        await webcam.play();
+        log("Webcam started!");
 
-    window.requestAnimationFrame(loop);
+        const container = document.getElementById("container");
+        container.innerHTML = "";
+        container.appendChild(webcam.canvas);
+
+        window.requestAnimationFrame(loop);
+    } catch (err) {
+        log("Error initializing: " + err);
+        console.error(err);
+    }
 }
 
 async function loop() {
-    webcam.update();
-    frameCount++;
-    if (frameCount % FRAME_SKIP === 0) {
-        await detectGrid();
+    try {
+        webcam.update();
+        frameCount++;
+        if (frameCount % FRAME_SKIP === 0) {
+            await detectGrid();
+        }
+        window.requestAnimationFrame(loop);
+    } catch (err) {
+        log("Error in loop: " + err);
+        console.error(err);
     }
-    window.requestAnimationFrame(loop);
 }
 
 async function detectGrid() {
@@ -63,16 +86,20 @@ async function detectGrid() {
     for (let y = 0; y < GRID; y++) {
         for (let x = 0; x < GRID; x++) {
             const imageData = ctx.getImageData(x * cellW, y * cellH, cellW, cellH);
+
             const temp = document.createElement("canvas");
-            temp.width = 224;  // Resize for TF.js small model
+            temp.width = 224; // Resize for TF.js
             temp.height = 224;
             temp.getContext("2d").putImageData(imageData, 0, 0);
 
-            const prediction = await model.predict(temp);
-            const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
-
-            if (dirty && dirty.probability > THRESHOLD) {
-                drawBox(x * cellW, y * cellH, cellW, cellH);
+            try {
+                const prediction = await model.predict(temp);
+                const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
+                if (dirty && dirty.probability > THRESHOLD) {
+                    drawBox(x * cellW, y * cellH, cellW, cellH);
+                }
+            } catch (err) {
+                log("Prediction error in cell [" + x + "," + y + "]: " + err);
             }
         }
     }
@@ -88,6 +115,6 @@ function drawBox(x, y, w, h) {
     document.getElementById("container").appendChild(box);
 }
 </script>
+
 </body>
 </html>
-
