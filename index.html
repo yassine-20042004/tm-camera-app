@@ -48,8 +48,9 @@ let model, webcam;
 async function init() {
     try {
         model = await tmImage.load(URL + "model.json", URL + "metadata.json");
-        webcam = new tmImage.Webcam(320, 320, false);
-        await webcam.setup(); // ask for permission
+        // request back camera
+        webcam = new tmImage.Webcam(320, 320, false); 
+        await webcam.setup({ facingMode: "environment" }); 
         await webcam.play();
 
         const container = document.getElementById("container");
@@ -62,6 +63,7 @@ async function init() {
         alert("Could not access webcam or load model. Check console.");
     }
 }
+
 
 async function loop() {
     webcam.update();
@@ -134,3 +136,4 @@ function drawBox(x, y, w, h) {
 </script>
 </body>
 </html>
+
