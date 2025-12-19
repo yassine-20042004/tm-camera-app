@@ -10,68 +10,94 @@ body { background:#111; color:#fff; text-align:center; font-family:Arial; }
 canvas { border-radius:12px; }
 .box { position:absolute; border:3px solid rgba(255,0,0,0.7); box-sizing:border-box; pointer-events:none; }
 #status { margin-top:10px; font-size:14px; color:#ffcc00; }
-button { padding:10px 20px; font-size:16px; margin-top:10px; cursor:pointer; }
+button { padding:10px 20px; font-size:16px; margin:10px; cursor:pointer; }
+input[type="file"] { margin-top:10px; }
 </style>
 
-<!-- Fixed versions for GitHub Pages -->
+<!-- Fixed stable versions -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4/dist/teachablemachine-image.min.js"></script>
 </head>
 
 <body>
 <h2>🚧 Dirty Road Detection</h2>
-<button id="startButton">Start Camera</button>
+
+<button id="startWebcam">Start Webcam</button>
+<input type="file" id="fileInput" accept="image/*">
 <div id="container"></div>
 <p id="status">Waiting to start...</p>
 
 <script>
-const MODEL_URL = "https://yassine-20042004.github.io/tm-camera-app/mymodel/"; // full URL
-const GRID = 3;             // smaller grid = faster
+const MODEL_URL = "https://yassine-20042004.github.io/tm-camera-app/mymodel/"; 
+const GRID = 3;             
 const THRESHOLD = 0.65;
-const FRAME_SKIP = 2;       // predict every 2 frames
+const FRAME_SKIP = 2;       
 
 let model, webcam, frameCount = 0;
 const statusEl = document.getElementById("status");
+const container = document.getElementById("container");
 
-document.getElementById("startButton").onclick = init;
-
-async function init() {
-    statusEl.innerText = "Loading model...";
-    try {
-        // check if model exists
-        const res = await fetch(MODEL_URL + "model.json");
-        if(!res.ok) throw new Error("Model file not found");
-
+async function loadModel() {
+    if (!model) {
+        statusEl.innerText = "Loading model...";
         model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
-        statusEl.innerText = "Model loaded! Starting camera...";
-
-        webcam = new tmImage.Webcam(320, 320, true); // back camera
-        await webcam.setup({ facingMode: "environment" });
-        await webcam.play();
-
-        const container = document.getElementById("container");
-        container.innerHTML = "";
-        container.appendChild(webcam.canvas);
-
-        statusEl.innerText = "Camera started. Detecting dirt...";
-        window.requestAnimationFrame(loop);
-    } catch(e) {
-        console.error(e);
-        statusEl.innerText = "Error: " + e.message;
+        statusEl.innerText = "Model loaded!";
     }
 }
+
+// ------------------- Webcam -------------------
+document.getElementById("startWebcam").onclick = async () => {
+    await loadModel();
+    try {
+        webcam = new tmImage.Webcam(320, 320, true); // mirrored
+        await webcam.setup({ facingMode: "environment" });
+        await webcam.play();
+        webcam.canvas.style.transform = "scaleX(-1)"; // fix mirrored behavior
+        container.innerHTML = "";
+        container.appendChild(webcam.canvas);
+        statusEl.innerText = "Webcam started. Detecting dirt...";
+        frameCount = 0;
+        window.requestAnimationFrame(loop);
+    } catch(err) {
+        console.error(err);
+        statusEl.innerText = "Error accessing webcam: " + err.message;
+    }
+};
 
 async function loop() {
     webcam.update();
     frameCount++;
-    if(frameCount % FRAME_SKIP === 0) await detectGrid();
+    if(frameCount % FRAME_SKIP === 0) await detectGrid(webcam.canvas);
     window.requestAnimationFrame(loop);
 }
 
-async function detectGrid() {
-    const ctx = webcam.canvas.getContext("2d");
-    const w = webcam.canvas.width;
-    const h = webcam.canvas.height;
+// ------------------- Image Upload -------------------
+document.getElementById("fileInput").addEventListener("change", async (event) => {
+    await loadModel();
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const img = new Image();
+    img.onload = async () => {
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = img.width;
+        tempCanvas.height = img.height;
+        tempCanvas.getContext("2d").drawImage(img, 0, 0);
+
+        container.innerHTML = "";
+        container.appendChild(tempCanvas);
+        statusEl.innerText = "Detecting dirt on uploaded image...";
+
+        await detectGrid(tempCanvas);
+    };
+    img.src = URL.createObjectURL(file);
+});
+
+// ------------------- Detection -------------------
+async function detectGrid(canvas) {
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
 
     document.querySelectorAll(".box").forEach(b => b.remove());
 
@@ -85,6 +111,7 @@ async function detectGrid() {
     for(let y = 0; y <= h - cellH; y += strideY){
         for(let x = 0; x <= w - cellW; x += strideX){
             const imageData = ctx.getImageData(x, y, cellW, cellH);
+
             const temp = document.createElement("canvas");
             temp.width = cellW;
             temp.height = cellH;
@@ -105,15 +132,13 @@ async function detectGrid() {
     mergeBoxes(dirtyCells);
 }
 
-// Merge nearby dirty cells into one bounding box
+// ------------------- Merge Boxes -------------------
 function mergeBoxes(cells){
     if(cells.length === 0) return;
-
     let minX = Math.min(...cells.map(c => c.x));
     let minY = Math.min(...cells.map(c => c.y));
     let maxX = Math.max(...cells.map(c => c.x + c.w));
     let maxY = Math.max(...cells.map(c => c.y + c.h));
-
     drawBox(minX, minY, maxX - minX, maxY - minY);
 }
 
@@ -124,7 +149,7 @@ function drawBox(x, y, w, h){
     box.style.top = y + "px";
     box.style.width = w + "px";
     box.style.height = h + "px";
-    document.getElementById("container").appendChild(box);
+    container.appendChild(box);
 }
 </script>
 </body>
