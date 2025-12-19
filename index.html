@@ -11,39 +11,47 @@ body { background:#111; color:#fff; text-align:center; font-family:Arial; }
 #container { position:relative; display:inline-block; }
 canvas { border-radius:12px; }
 .box { position:absolute; border:3px solid rgba(255,0,0,0.7); box-sizing:border-box; pointer-events:none; }
+#status { margin-top:10px; font-size:14px; color:#ffcc00; }
 </style>
 </head>
 <body>
+
 <h2>🚧 Dirty Road Detection</h2>
 <button id="startButton">Start Camera</button>
 <div id="container"></div>
-<p id="status"></p>
+<p id="status">Waiting to start...</p>
 
 <script>
-const URL = "./mymodel/";
-const GRID = 3;       // lower grid = faster
+const MODEL_URL = "https://yassine-20042004.github.io/tm-camera-app/mymodel/"; // full URL
+const GRID = 3;       // smaller grid = faster
 const THRESHOLD = 0.65;
-const FRAME_SKIP = 2; // only predict every 2 frames
+const FRAME_SKIP = 2; // predict every 2 frames
 
 let model, webcam, frameCount = 0;
+const statusEl = document.getElementById("status");
 
 document.getElementById("startButton").onclick = init;
 
 async function init() {
-    const status = document.getElementById("status");
-    status.innerText = "Loading model...";
+    statusEl.innerText = "Loading model...";
     try {
-        model = await tmImage.load(URL + "model.json", URL + "metadata.json");
-        status.innerText = "Model loaded!";
-        webcam = new tmImage.Webcam(320, 320, true);
+        // test if model.json exists
+        const res = await fetch(MODEL_URL + "model.json");
+        if(!res.ok) throw new Error("Model file not found");
+        
+        model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+        statusEl.innerText = "Model loaded! Starting camera...";
+
+        webcam = new tmImage.Webcam(320, 320, true); // request back camera
         await webcam.setup({ facingMode: "environment" });
         await webcam.play();
         document.getElementById("container").appendChild(webcam.canvas);
-        status.innerText = "Camera started. Detecting dirt...";
+
+        statusEl.innerText = "Camera started. Detecting dirt...";
         window.requestAnimationFrame(loop);
     } catch(e) {
         console.error(e);
-        status.innerText = "Failed to load model or access webcam";
+        statusEl.innerText = "Error: " + e.message;
     }
 }
 
@@ -59,6 +67,7 @@ async function detectGrid() {
     const w = webcam.canvas.width;
     const h = webcam.canvas.height;
 
+    // remove previous boxes
     document.querySelectorAll(".box").forEach(b => b.remove());
 
     const cellW = w / GRID;
@@ -72,10 +81,14 @@ async function detectGrid() {
             temp.height = cellH;
             temp.getContext("2d").putImageData(imageData, 0, 0);
 
-            const prediction = await model.predict(temp);
-            const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
-            if(dirty && dirty.probability > THRESHOLD){
-                drawBox(x*cellW, y*cellH, cellW, cellH);
+            try {
+                const prediction = await model.predict(temp);
+                const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
+                if(dirty && dirty.probability > THRESHOLD){
+                    drawBox(x*cellW, y*cellH, cellW, cellH);
+                }
+            } catch(err) {
+                console.error("Prediction error:", err);
             }
         }
     }
