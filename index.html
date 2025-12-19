@@ -85,7 +85,8 @@ function loop(time) {
 }
 
 async function predict() {
-    const predictions = await model.predict(webcam.canvas);
+    // IMPORTANT: flipHorizontal = true
+    const predictions = await model.predict(webcam.canvas, true);
 
     for (let i = 0; i < maxPredictions; i++) {
         labelContainer.childNodes[i].innerHTML =
@@ -93,9 +94,11 @@ async function predict() {
             (predictions[i].probability * 100).toFixed(1) + "%";
     }
 }
+
 </script>
 
 
 </body>
 </html>
+
 
