@@ -1,20 +1,37 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Dirty Road Detector</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-body { background:#111; color:#fff; text-align:center; font-family:Arial; }
-#container { position:relative; display:inline-block; }
-canvas { border-radius:12px; }
-.box { position:absolute; border:3px solid rgba(255,0,0,0.7); box-sizing:border-box; pointer-events:none; }
-#status { margin-top:10px; font-size:14px; color:#ffcc00; }
-button { padding:10px 20px; font-size:16px; margin:10px; cursor:pointer; }
-input[type="file"] { margin-top:10px; }
+body {
+    background:#111;
+    color:#fff;
+    text-align:center;
+    font-family:Arial;
+}
+#container {
+    display:inline-block;
+    margin-top:10px;
+}
+canvas {
+    border-radius:12px;
+}
+#result {
+    font-size:24px;
+    margin-top:15px;
+    color:#00ffcc;
+}
+button {
+    padding:10px 20px;
+    font-size:16px;
+    cursor:pointer;
+}
 </style>
 
-<!-- Fixed stable versions -->
+<!-- IMPORTANT: load scripts BEFORE using tmImage -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4/dist/teachablemachine-image.min.js"></script>
 </head>
@@ -22,134 +39,54 @@ input[type="file"] { margin-top:10px; }
 <body>
 <h2>🚧 Dirty Road Detection</h2>
 
-<button id="startWebcam">Start Webcam</button>
-<input type="file" id="fileInput" accept="image/*">
+<button onclick="start()">Start Camera</button>
+
 <div id="container"></div>
-<p id="status">Waiting to start...</p>
+<div id="result">Waiting...</div>
 
 <script>
-const MODEL_URL = "https://yassine-20042004.github.io/tm-camera-app/mymodel/"; 
-const GRID = 3;             
-const THRESHOLD = 0.65;
-const FRAME_SKIP = 2;       
+const MODEL_URL = "./mymodel/"; // ✅ LOCAL PATH
 
-let model, webcam, frameCount = 0;
-const statusEl = document.getElementById("status");
-const container = document.getElementById("container");
+let model, webcam;
 
+// Load model
 async function loadModel() {
-    if (!model) {
-        statusEl.innerText = "Loading model...";
-        model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
-        statusEl.innerText = "Model loaded!";
-    }
+    model = await tmImage.load(
+        MODEL_URL + "model.json",
+        MODEL_URL + "metadata.json"
+    );
+    document.getElementById("result").innerText = "Model loaded. Start camera.";
 }
+loadModel();
 
-// ------------------- Webcam -------------------
-document.getElementById("startWebcam").onclick = async () => {
-    await loadModel();
-    try {
-        webcam = new tmImage.Webcam(320, 320, true); // mirrored
-        await webcam.setup({ facingMode: "environment" });
-        await webcam.play();
-        webcam.canvas.style.transform = "scaleX(-1)"; // fix mirrored behavior
-        container.innerHTML = "";
-        container.appendChild(webcam.canvas);
-        statusEl.innerText = "Webcam started. Detecting dirt...";
-        frameCount = 0;
-        window.requestAnimationFrame(loop);
-    } catch(err) {
-        console.error(err);
-        statusEl.innerText = "Error accessing webcam: " + err.message;
-    }
-};
+// Start webcam
+async function start() {
+    webcam = new tmImage.Webcam(320, 320, true); // mirrored
+    await webcam.setup({ facingMode: "environment" });
+    await webcam.play();
 
-async function loop() {
-    webcam.update();
-    frameCount++;
-    if(frameCount % FRAME_SKIP === 0) await detectGrid(webcam.canvas);
+    webcam.canvas.style.transform = "scaleX(-1)";
+
+    const container = document.getElementById("container");
+    container.innerHTML = "";
+    container.appendChild(webcam.canvas);
+
     window.requestAnimationFrame(loop);
 }
 
-// ------------------- Image Upload -------------------
-document.getElementById("fileInput").addEventListener("change", async (event) => {
-    await loadModel();
-    const file = event.target.files[0];
-    if (!file) return;
+// Prediction loop
+async function loop() {
+    webcam.update();
 
-    const img = new Image();
-    img.onload = async () => {
-        const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = img.width;
-        tempCanvas.height = img.height;
-        tempCanvas.getContext("2d").drawImage(img, 0, 0);
+    const predictions = await model.predict(webcam.canvas);
+    const best = predictions.reduce((a,b) =>
+        a.probability > b.probability ? a : b
+    );
 
-        container.innerHTML = "";
-        container.appendChild(tempCanvas);
-        statusEl.innerText = "Detecting dirt on uploaded image...";
+    document.getElementById("result").innerText =
+        `${best.className} (${(best.probability * 100).toFixed(1)}%)`;
 
-        await detectGrid(tempCanvas);
-    };
-    img.src = URL.createObjectURL(file);
-});
-
-// ------------------- Detection -------------------
-async function detectGrid(canvas) {
-    const ctx = canvas.getContext("2d");
-    const w = canvas.width;
-    const h = canvas.height;
-
-    document.querySelectorAll(".box").forEach(b => b.remove());
-
-    const cellW = w / GRID;
-    const cellH = h / GRID;
-    const strideX = cellW / 2;
-    const strideY = cellH / 2;
-
-    let dirtyCells = [];
-
-    for(let y = 0; y <= h - cellH; y += strideY){
-        for(let x = 0; x <= w - cellW; x += strideX){
-            const imageData = ctx.getImageData(x, y, cellW, cellH);
-
-            const temp = document.createElement("canvas");
-            temp.width = cellW;
-            temp.height = cellH;
-            temp.getContext("2d").putImageData(imageData, 0, 0);
-
-            try {
-                const prediction = await model.predict(temp);
-                const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
-                if(dirty && dirty.probability > THRESHOLD){
-                    dirtyCells.push({x, y, w: cellW, h: cellH});
-                }
-            } catch(err) {
-                console.error("Prediction error:", err);
-            }
-        }
-    }
-
-    mergeBoxes(dirtyCells);
-}
-
-// ------------------- Merge Boxes -------------------
-function mergeBoxes(cells){
-    if(cells.length === 0) return;
-    let minX = Math.min(...cells.map(c => c.x));
-    let minY = Math.min(...cells.map(c => c.y));
-    let maxX = Math.max(...cells.map(c => c.x + c.w));
-    let maxY = Math.max(...cells.map(c => c.y + c.h));
-    drawBox(minX, minY, maxX - minX, maxY - minY);
-}
-
-function drawBox(x, y, w, h){
-    const box = document.createElement("div");
-    box.className = "box";
-    box.style.left = x + "px";
-    box.style.top = y + "px";
-    box.style.width = w + "px";
-    box.style.height = h + "px";
-    container.appendChild(box);
+    window.requestAnimationFrame(loop);
 }
 </script>
 </body>
