@@ -25,7 +25,13 @@ canvas {
 }
 .box {
     position:absolute;
-    border:3px solid rgba(255,0,0,0.7);
+    border:2px solid rgba(255,0,0,0.5); /* per-cell boxes */
+    box-sizing:border-box;
+    pointer-events: none;
+}
+.merged-box {
+    position:absolute;
+    border:4px solid rgba(255,0,0,0.9); /* merged box */
     box-sizing:border-box;
     pointer-events: none;
 }
@@ -49,7 +55,7 @@ async function init() {
     try {
         model = await tmImage.load(URL + "model.json", URL + "metadata.json");
         webcam = new tmImage.Webcam(320, 320, false);
-        await webcam.setup(); // ask for permission
+        await webcam.setup();
         await webcam.play();
 
         const container = document.getElementById("container");
@@ -74,7 +80,8 @@ async function detectGrid() {
     const w = webcam.canvas.width;
     const h = webcam.canvas.height;
 
-    document.querySelectorAll(".box").forEach(b => b.remove());
+    // remove old boxes
+    document.querySelectorAll(".box, .merged-box").forEach(b => b.remove());
 
     const cellW = w / GRID;
     const cellH = h / GRID;
@@ -103,15 +110,27 @@ async function detectGrid() {
 
             if (dirty && dirty.probability > THRESHOLD) {
                 dirtyCells.push({x, y, w: cellW, h: cellH});
+                drawCellBox(x, y, cellW, cellH); // draw per-cell box
             }
         }
     }
 
-    mergeBoxes(dirtyCells);
+    drawMergedBox(dirtyCells); // draw overall merged box
 }
 
-// Merge all nearby dirty cells into one bounding box
-function mergeBoxes(dirtyCells) {
+// Draw per-cell box
+function drawCellBox(x, y, w, h) {
+    const box = document.createElement("div");
+    box.className = "box";
+    box.style.left = x + "px";
+    box.style.top = y + "px";
+    box.style.width = w + "px";
+    box.style.height = h + "px";
+    document.getElementById("container").appendChild(box);
+}
+
+// Draw merged box around all dirty cells
+function drawMergedBox(dirtyCells) {
     if (dirtyCells.length === 0) return;
 
     let minX = Math.min(...dirtyCells.map(c => c.x));
@@ -119,16 +138,12 @@ function mergeBoxes(dirtyCells) {
     let maxX = Math.max(...dirtyCells.map(c => c.x + c.w));
     let maxY = Math.max(...dirtyCells.map(c => c.y + c.h));
 
-    drawBox(minX, minY, maxX - minX, maxY - minY);
-}
-
-function drawBox(x, y, w, h) {
     const box = document.createElement("div");
-    box.className = "box";
-    box.style.left = x + "px";
-    box.style.top = y + "px";
-    box.style.width = w + "px";
-    box.style.height = h + "px";
+    box.className = "merged-box";
+    box.style.left = minX + "px";
+    box.style.top = minY + "px";
+    box.style.width = (maxX - minX) + "px";
+    box.style.height = (maxY - minY) + "px";
     document.getElementById("container").appendChild(box);
 }
 </script>
