@@ -41,52 +41,52 @@ button {
 const MODEL_URL = "./mymodel/";
 
 let model, webcam, labelContainer, maxPredictions;
+let lastPredictTime = 0;
+const PREDICT_INTERVAL = 300; // ms (adjust 200–500)
 
-// Button click REQUIRED
 document.getElementById("startBtn").addEventListener("click", init);
 
 async function init() {
     document.getElementById("startBtn").disabled = true;
     document.getElementById("startBtn").innerText = "Loading...";
 
-    try {
-        model = await tmImage.load(
-            MODEL_URL + "model.json",
-            MODEL_URL + "metadata.json"
-        );
+    model = await tmImage.load(
+        MODEL_URL + "model.json",
+        MODEL_URL + "metadata.json"
+    );
+    maxPredictions = model.getTotalClasses();
 
-        maxPredictions = model.getTotalClasses();
+    webcam = new tmImage.Webcam(320, 320, false);
+    await webcam.setup({ facingMode: "environment" });
+    await webcam.play();
 
-        webcam = new tmImage.Webcam(320, 320, false);
-        await webcam.setup({
-            facingMode: { exact: "environment" }
-        });
-        await webcam.play();
+    document.getElementById("webcam-container").appendChild(webcam.canvas);
 
-        document.getElementById("webcam-container").appendChild(webcam.canvas);
-
-        labelContainer = document.getElementById("label-container");
-        labelContainer.innerHTML = "";
-        for (let i = 0; i < maxPredictions; i++) {
-            labelContainer.appendChild(document.createElement("div"));
-        }
-
-        window.requestAnimationFrame(loop);
-        document.getElementById("startBtn").innerText = "Camera Started";
-    } catch (err) {
-        alert("ERROR: " + err.message);
-        console.error(err);
+    labelContainer = document.getElementById("label-container");
+    labelContainer.innerHTML = "";
+    for (let i = 0; i < maxPredictions; i++) {
+        labelContainer.appendChild(document.createElement("div"));
     }
+
+    document.getElementById("startBtn").innerText = "Camera Running";
+    requestAnimationFrame(loop);
 }
 
-async function loop() {
-    webcam.update();
-    await predict();
-    window.requestAnimationFrame(loop);
+function loop(time) {
+    webcam.update(); // 🎥 ALWAYS LIVE
+
+    // run prediction only every X ms
+    if (time - lastPredictTime > PREDICT_INTERVAL) {
+        lastPredictTime = time;
+        predict();
+    }
+
+    requestAnimationFrame(loop);
 }
 
 async function predict() {
     const predictions = await model.predict(webcam.canvas);
+
     for (let i = 0; i < maxPredictions; i++) {
         labelContainer.childNodes[i].innerHTML =
             predictions[i].className + ": " +
@@ -95,5 +95,7 @@ async function predict() {
 }
 </script>
 
+
 </body>
 </html>
+
