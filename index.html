@@ -1,79 +1,111 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Teachable Machine Camera</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Dirty Road Detector</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background: #111;
-            color: #fff;
-            margin: 0;
-            padding: 20px;
-        }
-        button {
-            padding: 12px 20px;
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-    </style>
+<style>
+body {
+    background:#111;
+    color:#fff;
+    text-align:center;
+    font-family:Arial;
+}
+#container {
+    position: relative;
+    display: inline-block;
+}
+canvas {
+    border-radius: 12px;
+}
+.box {
+    position:absolute;
+    border:3px solid red;
+    box-sizing:border-box;
+}
+</style>
 </head>
 
 <body>
-    <h2>Teachable Machine Scanner</h2>
-    <button onclick="init()">Start Camera</button>
+<h2>🚧 Dirty Road Detection</h2>
+<button onclick="init()">Start Camera</button>
 
-    <div id="webcam-container"></div>
-    <div id="label-container"></div>
+<div id="container"></div>
 
 <script>
-const URL = "./mymodel/";
+const URL = "./my_model/"; // clean / dirty model
+const GRID = 3;           // 3x3 grid
 
-let model, webcam, labelContainer, maxPredictions;
+let model, webcam;
 
 async function init() {
-    const modelURL = URL + "model.json";
-    const metadataURL = URL + "metadata.json";
+    model = await tmImage.load(URL + "model.json", URL + "metadata.json");
 
-    model = await tmImage.load(modelURL, metadataURL);
-    maxPredictions = model.getTotalClasses();
-
-    webcam = new tmImage.Webcam(300, 300, true);
+    webcam = new tmImage.Webcam(320, 320, false);
     await webcam.setup({ facingMode: "environment" });
     await webcam.play();
+
+    const container = document.getElementById("container");
+    container.innerHTML = "";
+    container.appendChild(webcam.canvas);
+
     window.requestAnimationFrame(loop);
-
-    document.getElementById("webcam-container").appendChild(webcam.canvas);
-    labelContainer = document.getElementById("label-container");
-
-    for (let i = 0; i < maxPredictions; i++) {
-        labelContainer.appendChild(document.createElement("div"));
-    }
 }
 
 async function loop() {
     webcam.update();
-    await predict();
+    await detectGrid();
     window.requestAnimationFrame(loop);
 }
 
-async function predict() {
-    const prediction = await model.predict(webcam.canvas);
+async function detectGrid() {
+    const ctx = webcam.canvas.getContext("2d");
+    const w = webcam.canvas.width;
+    const h = webcam.canvas.height;
 
-    let best = prediction.reduce((a, b) => a.probability > b.probability ? a : b);
+    document.querySelectorAll(".box").forEach(b => b.remove());
 
-    labelContainer.innerHTML = `
-        <h3>${best.className}</h3>
-        <p>Confidence: ${(best.probability * 100).toFixed(1)}%</p>
-    `;
+    const cellW = w / GRID;
+    const cellH = h / GRID;
+
+    for (let y = 0; y < GRID; y++) {
+        for (let x = 0; x < GRID; x++) {
+            const imageData = ctx.getImageData(
+                x * cellW, y * cellH, cellW, cellH
+            );
+
+            const temp = document.createElement("canvas");
+            temp.width = cellW;
+            temp.height = cellH;
+            temp.getContext("2d").putImageData(imageData, 0, 0);
+
+            const prediction = await model.predict(temp);
+
+            const dirty = prediction.find(p =>
+                p.className.toLowerCase().includes("dirty")
+            );
+
+            if (dirty && dirty.probability > 0.8) {
+                drawBox(x * cellW, y * cellH, cellW, cellH);
+            }
+        }
+    }
+}
+
+function drawBox(x, y, w, h) {
+    const box = document.createElement("div");
+    box.className = "box";
+    box.style.left = x + "px";
+    box.style.top = y + "px";
+    box.style.width = w + "px";
+    box.style.height = h + "px";
+    document.getElementById("container").appendChild(box);
 }
 </script>
 </body>
 </html>
-
