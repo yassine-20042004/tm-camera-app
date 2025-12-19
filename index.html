@@ -2,67 +2,118 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dirty Road Detector</title>
+    <title>Dirty Road Detection</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
+    <!-- TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+
+    <!-- Teachable Machine Image -->
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
-        #webcam-container canvas { max-width: 100%; }
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: #0f172a;
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 12px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            background: #22c55e;
+            color: black;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+
+        button:hover {
+            background: #16a34a;
+        }
+
+        #webcam-container canvas {
+            border-radius: 12px;
+            margin-top: 10px;
+        }
+
+        #label-container div {
+            font-size: 18px;
+            margin-top: 8px;
+        }
     </style>
 </head>
-
 <body>
-    <h2>Dirty Road Detection</h2>
+
+    <h1>🚧 Dirty Road Detection</h1>
+    <p>Using Teachable Machine + TensorFlow.js</p>
+
     <button onclick="init()">Start Camera</button>
 
     <div id="webcam-container"></div>
     <div id="label-container"></div>
 
-<script>
-const URL = "./mymodel/";
+    <script>
+        const URL = "./mymodel/";
 
-let model, webcam, labelContainer;
+        let model, webcam, labelContainer, maxPredictions;
 
-async function init() {
-    const modelURL = URL + "model.json";
-    const metadataURL = URL + "metadata.json";
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
 
-    model = await tmImage.load(modelURL, metadataURL);
+            try {
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
 
-    webcam = new tmImage.Webcam(320, 320, true);
-    await webcam.setup({ facingMode: "environment" });
-    await webcam.play();
+                webcam = new tmImage.Webcam(224, 224, true);
+                await webcam.setup({
+                    facingMode: "environment"
+                });
+                await webcam.play();
+                window.requestAnimationFrame(loop);
 
-    document.getElementById("webcam-container").appendChild(webcam.canvas);
+                document.getElementById("webcam-container").innerHTML = "";
+                document.getElementById("webcam-container").appendChild(webcam.canvas);
 
-    labelContainer = document.getElementById("label-container");
-    labelContainer.innerHTML = "";
+                labelContainer = document.getElementById("label-container");
+                labelContainer.innerHTML = "";
+                for (let i = 0; i < maxPredictions; i++) {
+                    labelContainer.appendChild(document.createElement("div"));
+                }
 
-    for (let i = 0; i < model.getTotalClasses(); i++) {
-        labelContainer.appendChild(document.createElement("div"));
-    }
+            } catch (err) {
+                alert("❌ Error loading model or camera");
+                console.error(err);
+            }
+        }
 
-    window.requestAnimationFrame(loop);
-}
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
 
-async function loop() {
-    webcam.update();
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
 
-    // 🔴 THIS LINE IS THE KEY FIX
-    const predictions = await model.predict(webcam.webcam);
+            for (let i = 0; i < maxPredictions; i++) {
+                const className = prediction[i].className;
+                const prob = prediction[i].probability;
 
-    for (let i = 0; i < predictions.length; i++) {
-        labelContainer.childNodes[i].innerHTML =
-            predictions[i].className + ": " +
-            (predictions[i].probability * 100).toFixed(1) + "%";
-    }
-
-    requestAnimationFrame(loop);
-}
-</script>
+                labelContainer.childNodes[i].innerHTML =
+                    `${className}: ${(prob * 100).toFixed(1)}%`;
+            }
+        }
+    </script>
 
 </body>
 </html>
