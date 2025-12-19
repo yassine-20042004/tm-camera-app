@@ -8,10 +8,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
 <style>
 body {
-    background:#111;
-    color:#fff;
-    text-align:center;
-    font-family:Arial;
+    background: #111;
+    color: #fff;
+    text-align: center;
+    font-family: Arial;
 }
 #container {
     position: relative;
@@ -21,9 +21,9 @@ canvas {
     border-radius: 12px;
 }
 .box {
-    position:absolute;
-    border:3px solid red;
-    box-sizing:border-box;
+    position: absolute;
+    border: 3px solid red;
+    box-sizing: border-box;
 }
 </style>
 </head>
@@ -32,14 +32,14 @@ canvas {
 <h2>🚧 Dirty Road Detection</h2>
 <button id="startButton">Start Camera</button>
 <div id="container"></div>
-<p id="status"></p>
+<p id="status">Click "Start Camera" to load the model</p>
 
 <script>
-/* === CONFIGURATION === */
-const URL = "https://yassine-20042004.github.io/tm-camera-app/mymodel/"; // <== Replace with your GitHub Pages URL
-const GRID = 3;             // 3x3 grid
-const FRAME_SKIP = 2;       // Predict every 2 frames
-const THRESHOLD = 0.75;     // Detection threshold
+// Path to your model folder (relative to index.html)
+const URL = "./mymodel/";  
+const GRID = 3;             
+const FRAME_SKIP = 2;       
+const THRESHOLD = 0.75;     
 let model, webcam, frameCount = 0;
 
 document.getElementById("startButton").onclick = init;
@@ -49,16 +49,15 @@ async function init() {
     status.innerText = "Loading model...";
     try {
         model = await tmImage.load(URL + "model.json", URL + "metadata.json");
-        status.innerText = "Model loaded!";
-        console.log("Model loaded successfully");
+        status.innerText = "Model loaded successfully!";
+        console.log("Model loaded:", model);
     } catch (e) {
-        status.innerText = "Failed to load model. Check console.";
+        status.innerText = "Failed to load model. Check console for details.";
         console.error("Model failed to load:", e);
         return;
     }
 
-    // Initialize webcam
-    webcam = new tmImage.Webcam(320, 320, true); // true = front camera fallback
+    webcam = new tmImage.Webcam(320, 320, true); // fallback to front camera
     await webcam.setup({ facingMode: "environment" }); // try back camera
     await webcam.play();
 
@@ -66,6 +65,7 @@ async function init() {
     container.innerHTML = "";
     container.appendChild(webcam.canvas);
 
+    status.innerText = "Camera started! Detecting dirt...";
     window.requestAnimationFrame(loop);
 }
 
@@ -83,7 +83,6 @@ async function detectGrid() {
     const w = webcam.canvas.width;
     const h = webcam.canvas.height;
 
-    // Remove old boxes
     document.querySelectorAll(".box").forEach(b => b.remove());
 
     const cellW = w / GRID;
