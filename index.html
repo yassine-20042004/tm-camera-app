@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dirty Road Detector</title>
+<title>Dirty Road Live Detection</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -20,36 +20,35 @@ canvas {
     border-radius:12px;
 }
 #result {
-    font-size:24px;
+    font-size:26px;
     margin-top:15px;
-    color:#00ffcc;
 }
 button {
-    padding:10px 20px;
+    padding:12px 24px;
     font-size:16px;
     cursor:pointer;
 }
 </style>
 
-<!-- IMPORTANT: load scripts BEFORE using tmImage -->
+<!-- Load libs FIRST -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4/dist/teachablemachine-image.min.js"></script>
 </head>
 
 <body>
-<h2>🚧 Dirty Road Detection</h2>
+<h2>🚧 Dirty Road Detection (LIVE)</h2>
 
-<button onclick="start()">Start Camera</button>
+<button onclick="start()">Start Live Detection</button>
 
 <div id="container"></div>
 <div id="result">Waiting...</div>
 
 <script>
-const MODEL_URL = "./mymodel/"; // ✅ LOCAL PATH
+const MODEL_URL = "./mymodel/";
 
-let model, webcam;
+let model, webcam, isRunning = false;
 
-// Load model
+// Load model once
 async function loadModel() {
     model = await tmImage.load(
         MODEL_URL + "model.json",
@@ -59,13 +58,14 @@ async function loadModel() {
 }
 loadModel();
 
-// Start webcam
+// Start camera and LIVE loop
 async function start() {
-    webcam = new tmImage.Webcam(320, 320, true); // mirrored
+    if (isRunning) return;
+    isRunning = true;
+
+    webcam = new tmImage.Webcam(320, 320, false);
     await webcam.setup({ facingMode: "environment" });
     await webcam.play();
-
-    webcam.canvas.style.transform = "scaleX(-1)";
 
     const container = document.getElementById("container");
     container.innerHTML = "";
@@ -74,7 +74,7 @@ async function start() {
     window.requestAnimationFrame(loop);
 }
 
-// Prediction loop
+// Continuous prediction loop
 async function loop() {
     webcam.update();
 
@@ -84,7 +84,7 @@ async function loop() {
     );
 
     document.getElementById("result").innerText =
-        `${best.className} (${(best.probability * 100).toFixed(1)}%)`;
+        `${best.className} — ${(best.probability * 100).toFixed(1)}%`;
 
     window.requestAnimationFrame(loop);
 }
