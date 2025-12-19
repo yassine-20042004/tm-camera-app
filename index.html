@@ -1,62 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Dirty Road Detection</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <title>Dirty Road Detector</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<style>
-body {
-    background:#111;
-    color:white;
-    font-family:Arial;
-    text-align:center;
-    padding-top:20px;
-}
-#webcam-container canvas {
-    border-radius:12px;
-    margin-top:10px;
-}
-button {
-    padding:14px 28px;
-    font-size:18px;
-    cursor:pointer;
-}
-</style>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
 
-<!-- IMPORTANT: load libs BEFORE script -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4/dist/teachablemachine-image.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        #webcam-container canvas { max-width: 100%; }
+    </style>
 </head>
 
 <body>
+    <h2>Dirty Road Detection</h2>
+    <button onclick="init()">Start Camera</button>
 
-<h2>🚧 Dirty Road Detection</h2>
-<button id="startBtn">Start Camera</button>
-
-<div id="webcam-container"></div>
-<div id="label-container"></div>
+    <div id="webcam-container"></div>
+    <div id="label-container"></div>
 
 <script>
-const MODEL_URL = "./mymodel/";
+const URL = "./mymodel/";
 
-let model, webcam, labelContainer, maxPredictions;
-let lastPredictTime = 0;
-const PREDICT_INTERVAL = 300; // ms (adjust 200–500)
-
-document.getElementById("startBtn").addEventListener("click", init);
+let model, webcam, labelContainer;
 
 async function init() {
-    document.getElementById("startBtn").disabled = true;
-    document.getElementById("startBtn").innerText = "Loading...";
+    const modelURL = URL + "model.json";
+    const metadataURL = URL + "metadata.json";
 
-    model = await tmImage.load(
-        MODEL_URL + "model.json",
-        MODEL_URL + "metadata.json"
-    );
-    maxPredictions = model.getTotalClasses();
+    model = await tmImage.load(modelURL, metadataURL);
 
-    webcam = new tmImage.Webcam(320, 320, false);
+    webcam = new tmImage.Webcam(320, 320, true);
     await webcam.setup({ facingMode: "environment" });
     await webcam.play();
 
@@ -64,41 +40,29 @@ async function init() {
 
     labelContainer = document.getElementById("label-container");
     labelContainer.innerHTML = "";
-    for (let i = 0; i < maxPredictions; i++) {
+
+    for (let i = 0; i < model.getTotalClasses(); i++) {
         labelContainer.appendChild(document.createElement("div"));
     }
 
-    document.getElementById("startBtn").innerText = "Camera Running";
-    requestAnimationFrame(loop);
+    window.requestAnimationFrame(loop);
 }
 
-function loop(time) {
-    webcam.update(); // 🎥 ALWAYS LIVE
+async function loop() {
+    webcam.update();
 
-    // run prediction only every X ms
-    if (time - lastPredictTime > PREDICT_INTERVAL) {
-        lastPredictTime = time;
-        predict();
-    }
+    // 🔴 THIS LINE IS THE KEY FIX
+    const predictions = await model.predict(webcam.webcam);
 
-    requestAnimationFrame(loop);
-}
-
-async function predict() {
-    // IMPORTANT: flipHorizontal = true
-    const predictions = await model.predict(webcam.canvas, true);
-
-    for (let i = 0; i < maxPredictions; i++) {
+    for (let i = 0; i < predictions.length; i++) {
         labelContainer.childNodes[i].innerHTML =
             predictions[i].className + ": " +
             (predictions[i].probability * 100).toFixed(1) + "%";
     }
+
+    requestAnimationFrame(loop);
 }
-
 </script>
-
 
 </body>
 </html>
-
-
