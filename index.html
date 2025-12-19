@@ -25,13 +25,13 @@ canvas {
 }
 .box {
     position:absolute;
-    border:2px solid rgba(255,0,0,0.5); /* per-cell boxes */
+    border:2px solid rgba(255,0,0,0.5);
     box-sizing:border-box;
     pointer-events: none;
 }
 .merged-box {
     position:absolute;
-    border:4px solid rgba(255,0,0,0.9); /* merged box */
+    border:4px solid rgba(255,0,0,0.9);
     box-sizing:border-box;
     pointer-events: none;
 }
@@ -45,17 +45,18 @@ canvas {
 <div id="container"></div>
 
 <script>
-const URL = "./mymodel/"; // update if hosted elsewhere
-const GRID = 5;           // higher resolution grid
-const THRESHOLD = 0.65;   // lower probability threshold
+const URL = "./my_model/"; // update with full path if needed
+const GRID = 5;           
+const THRESHOLD = 0.65;  
+const FRAME_SKIP = 2; // detect every 2 frames
 
 let model, webcam;
+let frameCount = 0;
 
 async function init() {
     try {
         model = await tmImage.load(URL + "model.json", URL + "metadata.json");
-        // request back camera
-        webcam = new tmImage.Webcam(320, 320, false); 
+        webcam = new tmImage.Webcam(320, 320, false);
         await webcam.setup({ facingMode: "environment" }); 
         await webcam.play();
 
@@ -70,10 +71,14 @@ async function init() {
     }
 }
 
-
 async function loop() {
     webcam.update();
-    await detectGrid();
+    
+    frameCount++;
+    if(frameCount % FRAME_SKIP === 0){
+        await detectGrid();
+    }
+    
     window.requestAnimationFrame(loop);
 }
 
@@ -87,41 +92,36 @@ async function detectGrid() {
 
     const cellW = w / GRID;
     const cellH = h / GRID;
-    const strideX = cellW / 2; // 50% overlap
+    const strideX = cellW / 2; 
     const strideY = cellH / 2;
 
     let dirtyCells = [];
 
     for (let y = 0; y <= h - cellH; y += strideY) {
         for (let x = 0; x <= w - cellW; x += strideX) {
-            const imageData = ctx.getImageData(x, y, cellW, cellH);
+            const cellCanvas = document.createElement("canvas");
+            cellCanvas.width = 224;
+            cellCanvas.height = 224;
+            const cellCtx = cellCanvas.getContext("2d");
 
-            // Grayscale preprocessing
-            for (let i = 0; i < imageData.data.length; i += 4) {
-                const avg = (imageData.data[i] + imageData.data[i+1] + imageData.data[i+2]) / 3;
-                imageData.data[i] = imageData.data[i+1] = imageData.data[i+2] = avg;
-            }
+            // draw cell resized to 224x224
+            cellCtx.drawImage(webcam.canvas, x, y, cellW, cellH, 0, 0, 224, 224);
 
-            const temp = document.createElement("canvas");
-            temp.width = cellW;
-            temp.height = cellH;
-            temp.getContext("2d").putImageData(imageData, 0, 0);
-
-            const prediction = await model.predict(temp);
+            const prediction = await model.predict(cellCanvas);
             const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
 
-            if (dirty && dirty.probability > THRESHOLD) {
+            if(dirty && dirty.probability > THRESHOLD){
                 dirtyCells.push({x, y, w: cellW, h: cellH});
-                drawCellBox(x, y, cellW, cellH); // draw per-cell box
+                drawCellBox(x, y, cellW, cellH);
             }
         }
     }
 
-    drawMergedBox(dirtyCells); // draw overall merged box
+    drawMergedBox(dirtyCells);
 }
 
 // Draw per-cell box
-function drawCellBox(x, y, w, h) {
+function drawCellBox(x, y, w, h){
     const box = document.createElement("div");
     box.className = "box";
     box.style.left = x + "px";
@@ -132,8 +132,8 @@ function drawCellBox(x, y, w, h) {
 }
 
 // Draw merged box around all dirty cells
-function drawMergedBox(dirtyCells) {
-    if (dirtyCells.length === 0) return;
+function drawMergedBox(dirtyCells){
+    if(dirtyCells.length === 0) return;
 
     let minX = Math.min(...dirtyCells.map(c => c.x));
     let minY = Math.min(...dirtyCells.map(c => c.y));
@@ -151,5 +151,3 @@ function drawMergedBox(dirtyCells) {
 </script>
 </body>
 </html>
-
-
