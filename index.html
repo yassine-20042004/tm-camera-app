@@ -25,8 +25,9 @@ canvas {
 }
 .box {
     position:absolute;
-    border:3px solid red;
+    border:3px solid rgba(255,0,0,0.7);
     box-sizing:border-box;
+    pointer-events: none;
 }
 </style>
 </head>
@@ -38,23 +39,28 @@ canvas {
 <div id="container"></div>
 
 <script>
-const URL = "./mymodel/"; // clean / dirty model
-const GRID = 3;           // 3x3 grid
+const URL = "./my_model/"; // update if hosted elsewhere
+const GRID = 5;           // higher resolution grid
+const THRESHOLD = 0.65;   // lower probability threshold
 
 let model, webcam;
 
 async function init() {
-    model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+    try {
+        model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+        webcam = new tmImage.Webcam(320, 320, false);
+        await webcam.setup(); // ask for permission
+        await webcam.play();
 
-    webcam = new tmImage.Webcam(320, 320, false);
-    await webcam.setup({ facingMode: "environment" });
-    await webcam.play();
+        const container = document.getElementById("container");
+        container.innerHTML = "";
+        container.appendChild(webcam.canvas);
 
-    const container = document.getElementById("container");
-    container.innerHTML = "";
-    container.appendChild(webcam.canvas);
-
-    window.requestAnimationFrame(loop);
+        window.requestAnimationFrame(loop);
+    } catch(err) {
+        console.error("Error starting webcam:", err);
+        alert("Could not access webcam or load model. Check console.");
+    }
 }
 
 async function loop() {
@@ -72,12 +78,20 @@ async function detectGrid() {
 
     const cellW = w / GRID;
     const cellH = h / GRID;
+    const strideX = cellW / 2; // 50% overlap
+    const strideY = cellH / 2;
 
-    for (let y = 0; y < GRID; y++) {
-        for (let x = 0; x < GRID; x++) {
-            const imageData = ctx.getImageData(
-                x * cellW, y * cellH, cellW, cellH
-            );
+    let dirtyCells = [];
+
+    for (let y = 0; y <= h - cellH; y += strideY) {
+        for (let x = 0; x <= w - cellW; x += strideX) {
+            const imageData = ctx.getImageData(x, y, cellW, cellH);
+
+            // Grayscale preprocessing
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                const avg = (imageData.data[i] + imageData.data[i+1] + imageData.data[i+2]) / 3;
+                imageData.data[i] = imageData.data[i+1] = imageData.data[i+2] = avg;
+            }
 
             const temp = document.createElement("canvas");
             temp.width = cellW;
@@ -85,16 +99,27 @@ async function detectGrid() {
             temp.getContext("2d").putImageData(imageData, 0, 0);
 
             const prediction = await model.predict(temp);
+            const dirty = prediction.find(p => p.className.toLowerCase().includes("dirty"));
 
-            const dirty = prediction.find(p =>
-                p.className.toLowerCase().includes("dirty")
-            );
-
-            if (dirty && dirty.probability > 0.8) {
-                drawBox(x * cellW, y * cellH, cellW, cellH);
+            if (dirty && dirty.probability > THRESHOLD) {
+                dirtyCells.push({x, y, w: cellW, h: cellH});
             }
         }
     }
+
+    mergeBoxes(dirtyCells);
+}
+
+// Merge all nearby dirty cells into one bounding box
+function mergeBoxes(dirtyCells) {
+    if (dirtyCells.length === 0) return;
+
+    let minX = Math.min(...dirtyCells.map(c => c.x));
+    let minY = Math.min(...dirtyCells.map(c => c.y));
+    let maxX = Math.max(...dirtyCells.map(c => c.x + c.w));
+    let maxY = Math.max(...dirtyCells.map(c => c.y + c.h));
+
+    drawBox(minX, minY, maxX - minX, maxY - minY);
 }
 
 function drawBox(x, y, w, h) {
@@ -109,4 +134,3 @@ function drawBox(x, y, w, h) {
 </script>
 </body>
 </html>
-
