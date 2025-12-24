@@ -1,3 +1,9 @@
+![TensorFlow](https://img.shields.io/badge/TensorFlow.js-FF6F00?logo=tensorflow&logoColor=white)
+![Teachable Machine](https://img.shields.io/badge/Teachable%20Machine-Google-blue)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6-yellow)
+![HTML](https://img.shields.io/badge/HTML5-Web-orange)
+![License](https://img.shields.io/badge/License-MIT-green)
+
 Road Cleanliness Classification
 CNN Image Classifier (Teachable Machine + TensorFlow.js)
 📌 Project Overview
