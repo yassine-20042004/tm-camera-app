@@ -72,6 +72,9 @@ Dirty roads
 
 Images were uploaded and labeled directly in Teachable Machine
 
+![Uploading WhatsApp Image 2025-12-20 at 07.12.50.jpeg…]()
+![Uploading WhatsApp Image 2025-12-20 at 07.12.51.jpeg…]()
+
 ⚠️ Dataset quality directly impacts model performance.
 
 🌐 How to Use the Model (HTML Integration)
